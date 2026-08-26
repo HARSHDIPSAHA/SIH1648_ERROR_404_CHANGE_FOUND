@@ -45,7 +45,7 @@ Follow these steps to run the project locally
 
 # Django Backend 
 
-This project is a Django-based backend for managing diabetes patient data, providing user authentication, patient data handling, and integration with machine learning models for outcome predictions and recommendations.
+This project is a Django-based backend for the museum ticketing chatbot: it receives Dialogflow webhook calls, stores users and trips, creates Razorpay payment links and generates ticket PDFs.
 ### 1. Clone the repository
  ```bash
 git clone https://github.com/HARSHDIPSAHA/Online-Museum-Ticketing-Chatbot
@@ -103,4 +103,43 @@ npm run build
 ### 5. For Backend Integration 
 ```bash 
 npm install axios
+```
+
+## How it works
+
+```mermaid
+flowchart LR
+  WEB["React page (frontend/textutils) with Dialogflow df-messenger widget"] -->|"user chat"| DF["Dialogflow agent (external)"]
+  DF -->|"webhook: phone, museum, visitors, date"| HOOK["POST /sangrah-bot/ ChatWebhookView"]
+  HOOK --> DB["SQLite: CustomUser, Trip, Museum"]
+  DF -->|"session params"| PAY["POST /payment-gateway/ RazorpayPaymentView"]
+  PAY -->|"calc_price from Museum prices"| RZP["utils.create_razorpay_payment_link"]
+  RZP -->|"payment link"| DF
+  DF --> VERIFY["POST /verify-and-generate/ RazorpayPaymentAndTicketGenerationView"]
+  VERIFY --> PDF["utils2.generate_and_upload_ticket: reportlab PDF, boto3 upload to S3"]
+  PDF -->|"presigned URL, expires in 60 s"| DF
+  DB -.->|"museum_bot_trip rows (MySQL on RDS)"| AN["aws-data-analytics: Express + mysql2 API, Plotly crowd chart"]
+```
+
+The Django URLs are in `SIH-main-backend/museum_booking/museum_bot/urls.py`: `sangrah-bot/`, `payment-gateway/`, `verify-and-generate/`.
+
+## Project structure
+
+```
+SIH-main-backend/museum_booking/
+  museum_booking/           Django settings and root urls
+  museum_bot/               models (CustomUser, Trip, Museum), views (webhook, payment, ticket), utils.py (Razorpay), utils2.py (reportlab + S3)
+  museum_bot/museum_static/ standalone ticket-PDF and S3 upload scripts
+  requirements.txt          Django 5.1.1, DRF, razorpay, reportlab, boto3, mysqlclient
+frontend/textutils/         create-react-app site (NCSM-styled landing page) embedding the Dialogflow messenger
+aws-data-analytics/         Node scripts: data_retrieve.js (RDS query), analysis.js (Express /data endpoint), index.html (Plotly chart)
+```
+
+## Status and limitations
+
+- Hackathon (SIH) prototype. The conversation logic (NLP, spelling tolerance, multilingual replies) lives in the Dialogflow agent, which is configured outside this repo; only the webhook fulfilment is here.
+- Razorpay, AWS S3 and RDS credentials in the code are left blank and must be supplied; the live deployment has been taken down (see above).
+- The Gemini museum-description step described in About Project is not part of the committed backend code.
+- The frontend does not call the Django API directly; all interaction goes through the Dialogflow widget.
+- `db.sqlite3` is committed; there are no tests beyond the Django and CRA defaults.
 
